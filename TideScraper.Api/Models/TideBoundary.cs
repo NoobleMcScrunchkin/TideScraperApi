@@ -5,5 +5,5 @@ namespace TideScraper.Api.Models;
 public class TideBoundary : Tide
 {
     [JsonConverter(typeof(JsonStringEnumConverter))]
-    public TideType Type { get; set; }
+    public TideType TideType { get; set; }
 }

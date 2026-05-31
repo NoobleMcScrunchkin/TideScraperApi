@@ -1,0 +1,21 @@
+# This is a generated file. Not intended for manual editing.
+services:
+  tidescraper.api:
+    build:
+      context: "/Users/harry/RiderProjects/TideScraper"
+      dockerfile: "TideScraper.Api/Dockerfile"
+      target: "base"
+    command: []
+    entrypoint:
+    - "dotnet"
+    - "/app/bin/Debug/net10.0/TideScraper.Api.dll"
+    environment:
+      ASPNETCORE_ENVIRONMENT: "Development"
+      DOTNET_USE_POLLING_FILE_WATCHER: "true"
+    image: "tidescraper.api:dev"
+    ports: []
+    volumes:
+    - "/Users/harry/RiderProjects/TideScraper/TideScraper.Api:/app:rw"
+    - "/Users/harry/RiderProjects/TideScraper:/src:rw"
+    - "/Users/harry/.nuget/packages:/home/app/.nuget/packages"
+    working_dir: "/app"

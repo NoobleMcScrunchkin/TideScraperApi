@@ -8,6 +8,32 @@ namespace TideScraper.Api.Controllers;
 [Route("/")]
 public class TidesController(ITideScraperService tideScraperService) : ControllerBase
 {
+    [HttpGet("CurrentTide", Name = "GetCurrentTides")]
+    [ProducesResponseType<Tide>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status500InternalServerError)]
+    public async Task<IResult> GetCurrentTide(CancellationToken cancellationToken = default)
+    {
+        var tides = await tideScraperService.GetTidesAsync(cancellationToken);
+
+        if (!tides.IsSuccess || tides.Value is null)
+        {
+            ProblemDetails problemDetails = new()
+            {
+                Title = tides.Error.ToString(),
+                Detail = "There was an error retrieving the tides.",
+                Status = 500
+            };
+
+            return Results.InternalServerError(problemDetails);
+        }
+        
+        DateTime currentTime = DateTime.Now;
+        
+        Tide closestTideValue = tides.Value.OrderBy(t => Math.Abs((t.Time - currentTime).Ticks)).First();
+
+        return Results.Ok(closestTideValue);
+    }
+    
     [HttpGet("Tides", Name = "GetTides")]
     [ProducesResponseType<Tide[]>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status500InternalServerError)]
