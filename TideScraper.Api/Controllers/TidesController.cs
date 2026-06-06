@@ -13,7 +13,7 @@ public class TidesController(ITideScraperService tideScraperService) : Controlle
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status500InternalServerError)]
     public async Task<IResult> GetCurrentTide(CancellationToken cancellationToken = default)
     {
-        var tides = await tideScraperService.GetTidesAsync(cancellationToken);
+        var tides = await tideScraperService.GetTidesAsync(DateTime.Today, cancellationToken);
 
         if (!tides.IsSuccess || tides.Value is null)
         {
@@ -37,9 +37,20 @@ public class TidesController(ITideScraperService tideScraperService) : Controlle
     [HttpGet("Tides", Name = "GetTides")]
     [ProducesResponseType<Tide[]>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status500InternalServerError)]
-    public async Task<IResult> GetTides(CancellationToken cancellationToken = default)
+    public async Task<IResult> GetTides([FromQuery(Name = "Year")] int? year, [FromQuery(Name = "DayOfYear")] int? dayOfYear, CancellationToken cancellationToken = default)
     {
-        var tides = await tideScraperService.GetTidesAsync(cancellationToken);
+        DateTime day;
+
+        if (dayOfYear is null && year is null)
+        {
+            day = DateTime.Today;
+        }
+        else
+        {
+            day = new DateTime(year ?? DateTime.Today.DayOfYear, 1, 1).AddDays((dayOfYear ?? 1) - 1);
+        }
+        
+        var tides = await tideScraperService.GetTidesAsync(day, cancellationToken);
 
         if (!tides.IsSuccess || tides.Value is null)
         {
@@ -59,9 +70,20 @@ public class TidesController(ITideScraperService tideScraperService) : Controlle
     [HttpGet("TideBoundaries", Name = "GetTideBoundaries")]
     [ProducesResponseType<TideBoundary[]>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status500InternalServerError)]
-    public async Task<IResult> GetTideBoundaries(CancellationToken cancellationToken = default)
+    public async Task<IResult> GetTideBoundaries([FromQuery(Name = "Year")] int? year, [FromQuery(Name = "DayOfYear")] int? dayOfYear, CancellationToken cancellationToken = default)
     {
-        var tideBoundaries = await tideScraperService.GetTideBoundariesAsync(cancellationToken);
+        DateTime day;
+
+        if (dayOfYear is null && year is null)
+        {
+            day = DateTime.Today;
+        }
+        else
+        {
+            day = new DateTime(year ?? DateTime.Today.DayOfYear, 1, 1).AddDays((dayOfYear ?? 1) - 1);
+        }
+        
+        var tideBoundaries = await tideScraperService.GetTideBoundariesAsync(day, cancellationToken);
 
         if (!tideBoundaries.IsSuccess || tideBoundaries.Value is null)
         {

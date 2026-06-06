@@ -20,11 +20,13 @@ public class TideScraperService : ITideScraperService
         _redisCache = muxer.GetDatabase();
     }
 
-    public async Task<Result<Tide[], TideScraperErrorEnum>> GetTidesAsync(CancellationToken cancellationToken = default)
+    public async Task<Result<Tide[], TideScraperErrorEnum>> GetTidesAsync(DateTime? providedDay = null, CancellationToken cancellationToken = default)
     {
+        DateTime day = providedDay ?? DateTime.Today;
+        
         Tide[] tides;
 
-        String? tidesJson = _redisCache.StringGet("tides");
+        String? tidesJson = _redisCache.StringGet($"tide:{day.Year}:{day.DayOfYear}");
 
         if (tidesJson != null)
         {
@@ -39,17 +41,17 @@ public class TideScraperService : ITideScraperService
             }
             catch
             {
-                await _redisCache.KeyDeleteAsync("tides");
+                await _redisCache.KeyDeleteAsync($"tide:{day.Year}:{day.DayOfYear}");
             }
         }
         
         try
         {
-            tides = await ScrapeTidesFromDigimap(cancellationToken);
+            tides = await ScrapeTidesFromDigimap(day, cancellationToken);
 
             TimeSpan diff = DateTime.Today.AddDays(1) - DateTime.Now;
             
-            await _redisCache.StringSetAsync("tides", JsonSerializer.Serialize(tides), diff);
+            await _redisCache.StringSetAsync($"tide:{day.Year}:{day.DayOfYear}", JsonSerializer.Serialize(tides), diff);
         }
         catch (Exception e)
         {
@@ -61,11 +63,13 @@ public class TideScraperService : ITideScraperService
         return Result<Tide[], TideScraperErrorEnum>.Success(tides);
     }
     
-    public async Task<Result<TideBoundary[], TideScraperErrorEnum>> GetTideBoundariesAsync(CancellationToken cancellationToken = default)
+    public async Task<Result<TideBoundary[], TideScraperErrorEnum>> GetTideBoundariesAsync(DateTime? providedDay = null, CancellationToken cancellationToken = default)
     {
+        DateTime day = providedDay ?? DateTime.Today;
+        
         TideBoundary[] tideBoundaries;
         
-        String? tidesJson = _redisCache.StringGet("tidesBoundaries");
+        String? tidesJson = _redisCache.StringGet($"tidesBoundaries:{day.Year}:{day.DayOfYear}");
 
         if (tidesJson != null)
         {
@@ -80,18 +84,20 @@ public class TideScraperService : ITideScraperService
             }
             catch
             {
-                await _redisCache.KeyDeleteAsync("tidesBoundaries");
+                await _redisCache.KeyDeleteAsync($"tidesBoundaries:{day.Year}:{day.DayOfYear}");
             }
         }
-
         
         try
         {
-            tideBoundaries = await ScrapeTideBoundariesFromDigimap(cancellationToken);
+            tideBoundaries = await ScrapeTideBoundariesFromDigimap(day, cancellationToken);
+            var tomorrowsTideBoundaries = await ScrapeTideBoundariesFromDigimap(day.AddDays(1), cancellationToken);
+
+            tideBoundaries = tideBoundaries.Append(tomorrowsTideBoundaries[0]).ToArray();
 
             TimeSpan diff = DateTime.Today.AddDays(1) - DateTime.Now;
             
-            await _redisCache.StringSetAsync("tidesBoundaries", JsonSerializer.Serialize(tideBoundaries), diff);
+            await _redisCache.StringSetAsync($"tidesBoundaries:{day.Year}:{day.DayOfYear}", JsonSerializer.Serialize(tideBoundaries), diff);
         }
         catch (Exception e)
         {
@@ -103,13 +109,18 @@ public class TideScraperService : ITideScraperService
         return Result<TideBoundary[], TideScraperErrorEnum>.Success(tideBoundaries);
     }
 
-    private async Task<Tide[]> ScrapeTidesFromDigimap(CancellationToken cancellationToken = default)
+    private async Task<Tide[]> ScrapeTidesFromDigimap(DateTime day, CancellationToken cancellationToken = default)
     {
+        int year = day.Year;
+        int dayOfYear = day.DayOfYear; 
+        int dayDiff = dayOfYear - DateTime.Today.DayOfYear;
+        int yearDiff = year - DateTime.Today.Year;
+        
         var config = AngleSharp.Configuration.Default.WithDefaultLoader();
 
         using var context = BrowsingContext.New(config);
 
-        var url = "https://tides.digimap.gg/";
+        string url = $"https://tides.digimap.gg/?year={year}&yearDay={dayOfYear}";
         
         using var document = await context.OpenAsync(url, cancellationToken);
 
@@ -138,7 +149,7 @@ public class TideScraperService : ITideScraperService
                     throw new Exception("Failed to get time and height cells");
                 }
                 
-                DateTime time = DateTime.SpecifyKind(DateTime.Parse(timeElement.TextContent.Trim()), DateTimeKind.Local);
+                DateTime time = DateTime.SpecifyKind(DateTime.Parse(timeElement.TextContent.Trim()).AddDays(dayDiff).AddYears(yearDiff), DateTimeKind.Local);
                 string height = heightElement.TextContent;
                 
                 tides.Add(new Tide
@@ -153,13 +164,18 @@ public class TideScraperService : ITideScraperService
         return tides.ToArray();
     }
 
-    private async Task<TideBoundary[]> ScrapeTideBoundariesFromDigimap(CancellationToken cancellationToken = default)
+    private async Task<TideBoundary[]> ScrapeTideBoundariesFromDigimap(DateTime day, CancellationToken cancellationToken = default)
     {
+        int year = day.Year;
+        int dayOfYear = day.DayOfYear;
+        int dayDiff = dayOfYear - DateTime.Today.DayOfYear;
+        int yearDiff = year - DateTime.Today.Year;
+        
         var config = AngleSharp.Configuration.Default.WithDefaultLoader();
 
         using var context = BrowsingContext.New(config);
 
-        var url = "https://tides.digimap.gg/";
+        var url = $"https://tides.digimap.gg/?year={year}&yearDay={dayOfYear}";
         
         using var document = await context.OpenAsync(url, cancellationToken);
 
@@ -188,7 +204,7 @@ public class TideScraperService : ITideScraperService
             }
             
             TideType type = boundaryType.TextContent.Trim() == "Low" ? TideType.Low : TideType.High;
-            DateTime time = DateTime.SpecifyKind(DateTime.Parse(timeElement.TextContent.Trim()), DateTimeKind.Local);
+            DateTime time = DateTime.SpecifyKind(DateTime.Parse(timeElement.TextContent.Trim()).AddDays(dayDiff).AddYears(yearDiff), DateTimeKind.Local);
             decimal height = decimal.Parse(heightElement.TextContent.Trim());
 
             return new TideBoundary()
